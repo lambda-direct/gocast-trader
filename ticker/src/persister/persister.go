@@ -3,19 +3,22 @@ package persister
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/lambda-direct/gocast-trader/fetcher"
 	"math"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/lambda-direct/gocast-trader/common/src/env"
+	"github.com/lambda-direct/gocast-trader/ticker/src/fetcher"
 )
 
 type Client struct {
 	fetcher *fetcher.Client
+	s       *env.Spec
 }
 
-func New(f *fetcher.Client) *Client {
-	return &Client{f}
+func New(f *fetcher.Client, s *env.Spec) *Client {
+	return &Client{f, s}
 }
 
 func (c *Client) Watch(errc chan<- error) {
@@ -36,7 +39,7 @@ func (c *Client) Watch(errc chan<- error) {
 				var err error
 				now := time.Now()
 
-				dirPath := fmt.Sprintf("data/%s", pair.Symbol)
+				dirPath := fmt.Sprintf("%s/%s", c.s.DataDir, pair.Symbol)
 				fileName := fmt.Sprintf("%s/%s.bin", dirPath, now.Format("02012006"))
 
 				filePoolMutex.RLock()

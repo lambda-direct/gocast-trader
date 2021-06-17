@@ -5,17 +5,23 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/lambda-direct/gocast-trader/fetcher"
-	"github.com/lambda-direct/gocast-trader/persister"
+	"github.com/kelseyhightower/envconfig"
+	"github.com/lambda-direct/gocast-trader/common/src/env"
+	"github.com/lambda-direct/gocast-trader/ticker/src/fetcher"
+	"github.com/lambda-direct/gocast-trader/ticker/src/persister"
 )
 
 func main() {
+	s := new(env.Spec)
+
+	envconfig.MustProcess("", s)
+
 	errc := make(chan error)
 
 	fetchClient := fetcher.New()
 	go fetchClient.Fetch()
 
-	persisterClient := persister.New(fetchClient)
+	persisterClient := persister.New(fetchClient, s)
 	go persisterClient.Watch(errc)
 
 	signalChan := make(chan os.Signal, 1)
