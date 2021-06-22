@@ -1,8 +1,10 @@
 package persister
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/lambda-direct/gocast-trader/ticker/src/lock"
 	"math"
 	"os"
 	"sync"
@@ -13,19 +15,26 @@ import (
 )
 
 type Client struct {
+	ctx     context.Context
 	fetcher *fetcher.Client
 	s       *env.Spec
+	l       *lock.Lock
 }
 
-func New(f *fetcher.Client, s *env.Spec) *Client {
-	return &Client{f, s}
+func New(ctx context.Context, f *fetcher.Client, s *env.Spec, l *lock.Lock) *Client {
+	return &Client{ctx, f, s, l}
 }
 
 func (c *Client) Watch(errc chan<- error) {
-	var filePoolMutex sync.RWMutex
-	filePool := make(map[string]*os.File)
+	c.l.Acquire(errc)
 
 	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		default:
+		}
+
 		start := time.Now()
 		latest := c.fetcher.Latest
 		var wg sync.WaitGroup
@@ -42,25 +51,18 @@ func (c *Client) Watch(errc chan<- error) {
 				dirPath := fmt.Sprintf("%s/%s", c.s.DataDir, pair.Symbol)
 				fileName := fmt.Sprintf("%s/%s.bin", dirPath, now.Format("02012006"))
 
-				filePoolMutex.RLock()
-				f, fExists := filePool[fileName]
-				filePoolMutex.RUnlock()
-				if !fExists {
-					if err := os.MkdirAll(dirPath, os.ModePerm); err != nil {
-						errc <- fmt.Errorf("unable to create directories: %w", err)
-						return
-					}
-
-					f, err = os.OpenFile(fileName, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
-					if err != nil {
-						errc <- fmt.Errorf("unable to open data file: %w", err)
-						return
-					}
-
-					filePoolMutex.Lock()
-					filePool[fileName] = f
-					filePoolMutex.Unlock()
+				if err := os.MkdirAll(dirPath, os.ModePerm); err != nil {
+					errc <- fmt.Errorf("unable to create directories: %w", err)
+					return
 				}
+
+				f, err := os.OpenFile(fileName, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+
+				if err != nil {
+					errc <- fmt.Errorf("unable to open data file: %w", err)
+					return
+				}
+				defer f.Close()
 
 				priceBytes := make([]byte, 16)
 				binary.LittleEndian.PutUint64(priceBytes[:8], math.Float64bits(pair.Price))
