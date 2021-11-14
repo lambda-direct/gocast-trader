@@ -71,10 +71,10 @@ func main() {
 		panic(err)
 	}
 
-	wallets := make([]*Wallet, 100)
+	wallets := make([]*Wallet, 10000)
 	for i := 0; i < len(wallets); i++ {
 		wallets[i] = &Wallet{
-			Pair:        pair,
+			Pair:        "BTCUSDT",
 			BalanceFiat: INITIAL_WALLET_BALANCE,
 			Generator:   rand.New(rand.NewSource(int64(i))),
 		}
@@ -111,7 +111,7 @@ func main() {
 			price := math.Float64frombits(binary.LittleEndian.Uint64(buf[offset : offset+8]))
 			ts := int64(binary.LittleEndian.Uint64(buf[offset+8 : offset+16]))
 
-			if ts%(4*3600) != 0 {
+			if ts%(24*3600) != 0 {
 				continue
 			}
 
@@ -161,9 +161,6 @@ func main() {
 	results := make([]ResultStats, len(wallets))
 
 	for i := 0; i < len(wallets); i++ {
-		if len(data) == 0 {
-			continue
-		}
 		balance := wallets[i].Balance(data[len(data)-1].Price)
 		total += balance
 		results[i] = ResultStats{

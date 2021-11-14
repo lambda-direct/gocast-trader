@@ -111,7 +111,8 @@ func main() {
 			price := math.Float64frombits(binary.LittleEndian.Uint64(buf[offset : offset+8]))
 			ts := int64(binary.LittleEndian.Uint64(buf[offset+8 : offset+16]))
 
-			if ts%(4*3600) != 0 {
+			if ts%(24*3600) != 0 {
+			if ts%(24*3600) != 0 {
 				continue
 			}
 

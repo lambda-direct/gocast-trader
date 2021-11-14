@@ -65,7 +65,7 @@ type ResultStats struct {
 const INITIAL_WALLET_BALANCE = 100
 
 func main() {
-	pair := "BTCUSDT"
+	pair := "ZECUSDT"
 	files, err := ioutil.ReadDir(fmt.Sprintf("/media/dan/My_Passport_4TB/ticker/data/%s", pair))
 	if err != nil {
 		panic(err)

@@ -8,7 +8,6 @@ import (
 	"math"
 	"math/rand"
 	"os"
-	"sort"
 	"sync"
 
 	lua "github.com/yuin/gopher-lua"
@@ -36,19 +35,16 @@ func (w *Wallet) Swap(price float64) {
 }
 
 func (w *Wallet) Buy(price float64) {
-	// if w.BalanceFiat >= 1200 {
-	// 	return
-	// }
-	w.BalanceCrypto = w.BalanceFiat / price * .999
+	w.BalanceCrypto = w.BalanceFiat / price
 	w.BalanceFiat = 0
 }
 
 func (w *Wallet) Sell(price float64) {
-	w.BalanceFiat = w.BalanceCrypto * price * .999
+	w.BalanceFiat = w.BalanceCrypto * price
 	w.BalanceCrypto = 0
 }
 
-func (w *Wallet) Balance(price float64) float64 {
+func (w *Wallet) Stats(price float64) float64 {
 	return w.BalanceFiat + w.BalanceCrypto*price
 }
 
@@ -57,13 +53,6 @@ type DataPoint struct {
 	Timestamp int64
 }
 
-type ResultStats struct {
-	StrategyIndex int
-	Balance       float64
-}
-
-const INITIAL_WALLET_BALANCE = 100
-
 func main() {
 	pair := "BTCUSDT"
 	files, err := ioutil.ReadDir(fmt.Sprintf("/media/dan/My_Passport_4TB/ticker/data/%s", pair))
@@ -71,23 +60,8 @@ func main() {
 		panic(err)
 	}
 
-	wallets := make([]*Wallet, 100)
-	for i := 0; i < len(wallets); i++ {
-		wallets[i] = &Wallet{
-			Pair:        pair,
-			BalanceFiat: INITIAL_WALLET_BALANCE,
-			Generator:   rand.New(rand.NewSource(int64(i))),
-		}
-	}
-
-	var data []DataPoint
-
-	for fileIndex, fileInDir := range files {
-		if fileIndex%2 == 0 {
-			continue
-		}
-
-		f, err := os.Open(fmt.Sprintf("/media/dan/My_Passport_4TB/ticker/data/%s/%s", pair, fileInDir.Name()))
+	for _, fileName := range files {
+		f, err := os.Open(fmt.Sprintf("/media/dan/My_Passport_4TB/ticker/data/%s/%s", pair, fileName.Name()))
 		if err != nil {
 			panic(err)
 		}
@@ -104,14 +78,14 @@ func main() {
 
 		f.Read(buf)
 
-		data = make([]DataPoint, 0)
+		var data []DataPoint
 
 		for i := int64(0); i < numPairs; i++ {
 			offset := i * 16
 			price := math.Float64frombits(binary.LittleEndian.Uint64(buf[offset : offset+8]))
 			ts := int64(binary.LittleEndian.Uint64(buf[offset+8 : offset+16]))
 
-			if ts%(4*3600) != 0 {
+			if ts%10 != 0 {
 				continue
 			}
 
@@ -120,6 +94,17 @@ func main() {
 				Timestamp: ts,
 			})
 		}
+
+		wallets := make([]*Wallet, 100)
+		for i := 0; i < len(wallets); i++ {
+			wallets[i] = &Wallet{
+				Pair:        "BTCUSDT",
+				BalanceFiat: 1000,
+				Generator:   rand.New(rand.NewSource(int64(i))),
+			}
+		}
+
+		// start := time.Now()
 
 		var wg sync.WaitGroup
 		wg.Add(len(wallets))
@@ -143,43 +128,15 @@ func main() {
 
 		wg.Wait()
 
-		// fmt.Printf("File %s processed (%d/%d)\n", fileInDir.Name(), fileIndex+1, len(files))
-
-		total := float64(0)
+		var balance float64 = 0
 
 		for i := 0; i < len(wallets); i++ {
-			balance := wallets[i].Balance(data[len(data)-1].Price)
-			total += balance
+			stats := wallets[i].Stats(data[len(data)-1].Price)
+			balance += stats
+			if stats > 1000 {
+				fmt.Printf("%d - %.2f\n", i, wallets[i].Stats(data[len(data)-1].Price))
+			}
 		}
-
-		initialBalance := float64(INITIAL_WALLET_BALANCE * len(wallets))
-		fmt.Printf("balance percentage: %.2f%%\n", total/initialBalance*100)
+		fmt.Printf("balance percentage: %.2f%%\n", (balance-float64(1000*len(wallets)))/balance*100)
 	}
-
-	total := float64(0)
-
-	results := make([]ResultStats, len(wallets))
-
-	for i := 0; i < len(wallets); i++ {
-		if len(data) == 0 {
-			continue
-		}
-		balance := wallets[i].Balance(data[len(data)-1].Price)
-		total += balance
-		results[i] = ResultStats{
-			StrategyIndex: i,
-			Balance:       balance,
-		}
-	}
-
-	sort.SliceStable(results, func(i, j int) bool {
-		return results[i].Balance < results[j].Balance
-	})
-
-	// for i := range results {
-	// 	fmt.Printf("%d\t%.2f\n", results[i].StrategyIndex, results[i].Balance)
-	// }
-
-	// initialBalance := float64(INITIAL_WALLET_BALANCE * len(wallets))
-	// fmt.Printf("balance percentage: %.2f%%\n", total/initialBalance*100)
 }
